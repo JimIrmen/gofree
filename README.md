@@ -23,7 +23,7 @@ you have:
       }
 ```
 Note the additional **var** keyword. This kind of makes switching from one language to another a little more difficult and it's hard to justify the strange syntax, given no obvious advantage to the change in syntax vs. C, C++, Java, et. al.
-* Go prefers a much more limited way to do things. That is you only have on looping statement, the for statement vs. other languages that give the developer options. You also only have one increment/decrement operator ++/-- as a suffix.
+* Go prefers a much more limited way to do things. That is you only have one looping statement, the for statement vs. other languages that give the developer options. You also only have one increment/decrement operator ++/-- used as a suffix.
 * Go is strongly typed but encourages loosely written applications. For example Go promotes the following syntax.
 
 ```go
@@ -35,7 +35,7 @@ In this context myVar is allocated and assigned without the developer having to 
    var myVar CustomType = someFunction();
 ```
 Although the former may look more elegant, I personally prefer the latter for maintenance and clarity of code.
-* These are just few of the obvious differences and they all pale in comparison to the one difference that annoys me (and many others) the most. The Go team decided that one of the largest difficulties in programming today is statement termination. That is, the evil of forcing developers to use a semi-colon. So the Go team wrote a parser and scanner that automatically inserts semi-colons in the code whenever a newline is encountered. The result is Go developers don't have to use semi-colons to terminate Go statement, instead a statement is terminated by a newline character (how is this better?). It is important to note that the actual specifications of the Go language specify the requirement for a terminating statement character, the semi-colon.
+* These are just few of the obvious differences and they all pale in comparison to the one difference that annoys me (and many others) the most. The Go team decided that one of the largest difficulties in programming today is statement termination. That is, the evil of forcing developers to use a semi-colon. So the Go team wrote a parser and scanner that automatically inserts semi-colons in the code whenever a newline is encountered. The result is Go developers don't have to use semi-colons to terminate a Go statement, instead a statement is terminated by a newline character (how is this better?). It is important to note that the actual specifications of the Go language specify the requirement for a terminating statement character, the semi-colon.
 ## Automatic Semi-Colon Insertion
 On the surface automatic semi-colon insertion sounds like a good thing. In practice this seemingly helpful decision forces a strict code format on the developer. For example, developers are forced into the following code format:
 
@@ -74,6 +74,30 @@ On the surface automatic semi-colon insertion sounds like a good thing. In pract
       func3()
 ```
 In simple terms developer's are restricted to using a K&R(1TBS) style. Unfortunately I prefer a Ratliff style, others perhaps an Allman, or Whitesmiths. What annoys me the most is the fact that I'm rather old school. I was taught as a young CS student that programming languages should not make format part of the syntax, a design error by many early language developers. So the Go team forcing such format just rubs me the wrong way.
+##Other Strange Syntax Effects
+There is also one special rule about semi-colons and automatic insertion. Note the following is a valid Go statement with automatic semi-colon insertions.
+
+```go
+ // No semi-colons needed 
+ 
+   if x == y {x = y * 2}else{y = x * 2}
+```
+Why no semi-colons? there is only one newline character, at the end of the line and clearly there are two statements without terminating semi-colon's or a newline character separating the statements. 
+
+Turns out, the Go team decided to make an exception, or special case for semi-colon insertion. You don't need to have any terminating character newline, or semi-colon if the statement is followed by a closing brace. So not only is the above code snippet valid so is the following:
+
+```go
+ // crazy indentation allowed
+ 
+   if x == y {
+      x = y *2 } else {
+      z = x + y
+      q = y -x
+      y = x *2 }
+   if q > z { 
+      doSomething()}
+```
+
 ## The Fix
 Faced with only two choices, abandoning Go all together, or making the current Go offering work the way I want it to. I chose the latter. Not only would it make working with Go much more pleasant but it would be an excellent way for me to learn and work with the Go programming language.
 
@@ -118,15 +142,15 @@ func main() {
          fmt.Println("Program args: ",os.Args[1]);
          }
       else {
-          fmt.Println("No Program args supplied");
+         fmt.Println("No Program args supplied");
          }
    // This might be some legacy code no semi-colons
    //AutoSemiOn - K&R Style
-     if len(os.Args) > 2 {
-        fmt.Println("Extra Program args: ",os.Args[2])
-     } else {
-        fmt.Println("No Extra args supplied")   
-        }
+      if len(os.Args) > 2 {
+         fmt.Println("Extra Program args: ",os.Args[2])
+      } else {
+         fmt.Println("No Extra args supplied")   
+         }
    }
 ```
 For those that prefer a Allman or Whitesmiths style, yes this is possible:
@@ -152,11 +176,11 @@ func main() {
       }
    // This might be some legacy code no semi-colons
    //AutoSemiOn - K&R Style
-     if len(os.Args) > 2 {
-      fmt.Println("Extra Program args: ",os.Args[2])
-     } else {
-        fmt.Println("No Extra args supplied")   
-        }
+      if len(os.Args) > 2 {
+         fmt.Println("Extra Program args: ",os.Args[2])
+      } else {
+         fmt.Println("No Extra args supplied")   
+      }
    }
 ```
 ## How To Make It Work

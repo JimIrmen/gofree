@@ -109,7 +109,7 @@ Although this might work what about building an entire directory of go files whe
 
 So then I thought what about a simple directive, similar to the go or line directives? By placing this directive as the first line of a go program it could signal the need to turn automatic semi colon insertion off. For example:
 
-```
+```go
 //AutoSemiOff - Note AutoSemiOn is of course the default if nothing is specified
 package main;
 import "fmt";
@@ -127,7 +127,7 @@ func main() {
 ```
 This would work for my immediate purposes and I did this as a first proof of concept. Simple and effective. Then as I was pouring through the Go source code it hit me. I'm always looking at other developers code. Many times I modify or copy their code and incorporate it into my own projects. Shouldn't there be a way to turn automatic semi-colon insertion on and off? This would avoid the need to either adapt to the strict Go format for code written in that manner, or to re-format the entire code to have semi-colons. So my final design is to incorporate two directives, AutoSemiOff and AutoSemiOn to control the automatic insertion of semi-colons. So something like this is possible:
 
-```
+```go
 //AutoSemiOff
 package main;
 import "fmt";

@@ -28,6 +28,13 @@ const (
 	directives                  // call handler for directives only
 	noAutoSemi
 )
+type defaultScanRecord struct{
+   autoSemi bool;
+   scanToken token;
+   literal string;
+   op Operator;
+   precedence int;
+   }
 
 type scanner struct {
 	source
@@ -101,7 +108,7 @@ func (s *scanner) setLit(kind LitKind, ok bool) {
 // If the scanner mode includes the directives (but not the comments)
 // flag, only comments containing a //line, /*line, or //go: directive
 // are reported, in the same way as regular comments.
-func (s *scanner) next() {
+func (s *scanner) nextOld() {
 	nlsemi := s.nlsemi
 	s.nlsemi = false
 
@@ -386,6 +393,371 @@ assignop:
 	s.tok = _Operator
 }
 
+// Experimental ------------------------------------------------------------
+
+var gScanMap = map[rune]func(*scanner,bool) bool { 
+   -1 : eofScan,
+   '\n' : defaultScan,
+   '0' : numberScan,
+   '1' : numberScan,
+   '2' : numberScan,
+   '3' : numberScan,
+   '4' : numberScan,
+   '5' : numberScan,
+   '6' : numberScan,
+   '7' : numberScan,
+   '8' : numberScan,
+   '9' : numberScan,
+   '"' : dblQuoteScan,
+   '`' : accentScan,
+   '\'' : snglQuoteScan,
+   '(' : defaultScan,
+   '[' : defaultScan,
+   '{' : defaultScan,
+   ',' : defaultScan,
+   ';' : defaultScan,
+   ')' : defaultScan,
+   ']' : defaultScan,
+   '}' : defaultScan,
+   ':' : colonScan,
+   '.' : periodScan,
+   '+' : plusMinusScan,
+   '-' : plusMinusScan,
+   '*' : defaultOpScan,
+   '/' : fSlashScan,
+   '%' : defaultOpScan,
+   '&' : andScan,
+   '|' : pipeScan,
+   '^' : defaultOpScan,
+   '<' : lAngleScan,
+   '>' : rAngleScan,
+   '=' : equalScan,
+   '!' : bangScan}
+
+
+var scanParmsTable = map[rune] defaultScanRecord {
+   '\n' : {autoSemi : false,scanToken : _Semi,literal : "newline",op : 0,precedence : -1},
+   '(' : {autoSemi : false,scanToken : _Lparen,literal : "",op : 0,precedence : -1},
+   ')' : {autoSemi : true,scanToken : _Rparen,literal : "",op : 0,precedence : -1},
+   '[' : {autoSemi : false,scanToken : _Lbrack,literal : "",op : 0,precedence : -1},
+   ']' : {autoSemi : true,scanToken : _Rbrack,literal : "",op : 0,precedence : -1},
+   '{' : {autoSemi : false,scanToken : _Lbrace,literal : "",op : 0,precedence : -1},
+   '}' : {autoSemi : true,scanToken : _Rbrace,literal : "",op : 0,precedence : -1},
+   ',' : {autoSemi : false,scanToken : _Comma,literal : "",op : 0,precedence : -1},
+   ';' : {autoSemi : false,scanToken : _Semi,literal : "semicolon",op : 0,precedence : -1},  
+   '+' : {autoSemi : true,scanToken : _IncOp,literal : "",op : Add,precedence : precAdd},
+   '-' : {autoSemi : true,scanToken : _IncOp,literal : "",op : Sub,precedence : precAdd},
+   '*' : {autoSemi : false,scanToken : _Star,literal : "",op : Mul,precedence : precMul},
+   '%' : {autoSemi : false,scanToken : _Operator,literal : "",op : Rem,precedence : precMul},
+   '^' : {autoSemi : false,scanToken : _Operator,literal : "",op : Xor,precedence : precAdd},
+   }
+   
+func (this *scanner) next(){
+   
+   var newlineIsSemi bool = this.nlsemi;
+   this.nlsemi = false;
+   var done bool = false;
+   // loop starts;
+      for !done {
+         this.stop();
+         var startLine, startCol uint = this.pos();
+         this.skipWhiteSpace(newlineIsSemi); 
+         this.line,this.col = this.pos();
+   // colbase and linebase are contants set to 1
+         this.blank = this.line > startLine || startCol == colbase;
+         this.start();
+            if isLetter(this.ch) || this.ch >= utf8.RuneSelf && this.atIdentChar(true) {
+               this.nextch();
+               this.ident();
+               done = true;
+            } else {
+               var found bool;
+               var scanFunction func(*scanner,bool) bool;
+               scanFunction,found = gScanMap[this.ch];
+                  if found {
+                     done = scanFunction(this,newlineIsSemi);
+                  } else {
+                     this.errorf("invalid character %#U",this.ch);
+                     this.nextch();
+                     }
+               }
+         }
+   return;
+   }
+   
+func (this *scanner) skipWhiteSpace(newLineIsSemi bool) {
+      for this.ch == ' ' || this.ch == '\t' || this.ch == '\n' && !newLineIsSemi || this.ch == '\r' {
+         this.nextch();
+         }
+   return;
+   }
+
+func defaultScan(this *scanner,newlineIsSemi bool) bool {
+
+   var scanParms defaultScanRecord;
+   
+   scanParms,_ = scanParmsTable[this.ch];
+   this.nextch();
+      if scanParms.autoSemi == true && this.mode & noAutoSemi == 0{
+         this.nlsemi = true;
+         }
+   this.tok = scanParms.scanToken;
+      if len(scanParms.literal) > 0 {
+         this.lit = scanParms.literal;
+         }
+   return true;
+   }
+
+func eofScan(this *scanner,newlineIsSemi bool) bool {
+   var done bool = true;
+      if newlineIsSemi {
+         this.lit = "EOF";
+         this.tok = _Semi;
+      } else {
+         this.tok = _EOF;
+         }
+   return done;
+   }
+   
+func numberScan(this *scanner,newlineIsSemi bool) bool {
+   this.number(false);
+   return true;
+   }
+   
+func dblQuoteScan(this *scanner,newlineIsSemi bool) bool {
+   this.stdString();
+   return true;
+   }
+   
+func accentScan(this *scanner,newlineIsSemi bool) bool {
+   this.rawString();
+   return true;
+   }
+   
+func snglQuoteScan(this *scanner,newlineIsSemi bool) bool {
+   this.rune();
+   return true;
+   }
+
+func colonScan(this *scanner,newlineIsSemi bool) bool {
+   this.nextch();
+      if this.ch == '=' {
+         this.nextch();
+         this.tok = _Define;
+      } else {
+         this.tok = _Colon;
+         }
+   return true;
+   }
+
+func periodScan(this *scanner,newlineIsSemi bool) bool {
+
+   this.nextch();
+   this.tok = _Dot;
+      if this.ch == '.'{
+         this.nextch();
+            if this.ch == '.' {
+               this.nextch();
+               this.tok = _DotDotDot;
+            } else {
+               this.rewind();
+               this.nextch();
+               }
+      } else if isDecimal(this.ch){
+         this.number(true);
+         }
+   return true;
+   }
+   
+func plusMinusScan(this *scanner, newlineIsSemi bool) bool {   
+   var prevChar rune = this.ch;
+   var scanParms defaultScanRecord;
+   
+   scanParms,_ = scanParmsTable[this.ch];   
+   this.nextch();
+   this.op = scanParms.op;
+   this.prec = scanParms.precedence;
+      if this.ch == prevChar {
+         this.nextch();
+            if scanParms.autoSemi == true && this.mode & noAutoSemi == 0 {
+               this.nlsemi = true;
+               }
+         this.tok = scanParms.scanToken;
+      } else if this.ch == '=' {
+         this.nextch();
+         this.tok = _AssignOp;
+      } else {
+         this.tok = _Operator;
+         }
+   return true;
+   }
+
+func defaultOpScan(this *scanner,newlineIsSemi bool) bool {
+   var scanParms defaultScanRecord;
+   
+   scanParms,_ = scanParmsTable[this.ch];   
+   this.nextch();
+   this.op = scanParms.op;
+   this.prec = scanParms.precedence;
+   this.tok = scanParms.scanToken;
+      if this.ch == '=' {
+         this.nextch();
+         this.tok = _AssignOp;
+         }
+   return true;
+   }
+   
+func fSlashScan(this *scanner,newlineIsSemi bool) bool {
+   var done bool = false;
+   this.nextch();
+      if this.ch == '/' {
+         this.nextch();
+         this.lineComment();
+         } else if this.ch == '*' {
+         this.nextch();
+         this.fullComment();
+         var line uint;
+         line,_ = this.pos();
+            if line > this.line && newlineIsSemi {
+               this.lit = "newline"
+               this.tok = _Semi;
+               }
+         } else {
+         this.op = Div;
+         this.prec = precMul;
+         this.tok = _Operator;
+            if this.ch == '=' {
+               this.nextch();
+               this.tok = _AssignOp;
+               }
+         done = true;
+         }
+   return done;
+   }
+
+func andScan(this *scanner,newlineIsSemi bool) bool {
+   this.nextch();
+      if this.ch == '&' {
+         this.nextch();
+         this.op = AndAnd;
+         this.prec = precAndAnd;
+         this.tok = _Operator;
+      } else {
+         this.op = And;
+         this.prec = precMul;
+            if this.ch == '^' {
+               this.nextch();
+               this.op = AndNot;
+               }
+            this.tok = _Operator;
+               if this.ch == '=' {
+                  this.nextch();
+                  this.tok = _AssignOp;
+                  }
+      }
+   return true;
+   }
+
+func pipeScan(this *scanner,newlineIsSemi bool) bool {
+   this.nextch();
+      if this.ch == '|' {
+         this.nextch();
+         this.op = OrOr;
+         this.prec = precOrOr;
+         this.tok = _Operator;
+      } else {
+         this.op = Or;
+         this.prec = precAdd;
+         this.tok = _Operator;
+            if this.ch == '=' {
+               this.nextch();
+               this.tok = _AssignOp;
+               }
+         }
+   return true;
+   }
+
+func lAngleScan(this *scanner,newlineIsSemi bool) bool {
+   this.nextch();
+      if this.ch == '=' {
+         this.nextch();
+         this.op = Leq;
+         this.prec = precCmp;
+         this.tok = _Operator;
+      } else if this.ch == '<' {
+         this.nextch();
+         this.op = Shl;
+         this.prec = precMul;
+         this.tok = _Operator;
+            if this.ch == '=' {
+               this.nextch();
+               this.tok = _AssignOp;
+               }
+      } else if this.ch == '-' {
+         this.nextch();
+         this.tok = _Arrow;
+      } else {
+         this.op = Lss;
+         this.prec = precCmp;
+         this.tok = _Operator;
+         }
+   return true;
+   }
+
+func rAngleScan(this *scanner,newlineIsSemi bool) bool {
+   this.nextch();
+      if this.ch == '=' {
+         this.nextch();
+         this.op = Geq;
+         this.prec = precCmp;
+         this.tok = _Operator;
+      } else if this.ch == '>' {
+         this.nextch();
+         this.op = Shr;
+         this.prec = precMul;
+         this.tok = _Operator;
+            if this.ch == '=' {
+               this.nextch();
+               this.tok = _AssignOp;
+               }
+      } else{
+         this.op = Gtr;
+         this.prec = precCmp;
+         this.tok = _Operator;
+         }
+   return true;
+   }
+
+func equalScan(this *scanner,newlineIsSemi bool) bool {
+   this.nextch();
+      if this.ch == '=' {
+         this.nextch();
+         this.op = Eql;
+         this.prec = precCmp;
+         this.tok = _Operator;
+      } else {
+         this.tok = _Assign;
+         }
+   return true;
+   }
+
+func bangScan(this *scanner,newlineIsSemi bool) bool {
+   this.nextch();
+      if this.ch == '=' {
+         this.nextch();
+         this.op = Neq;
+         this.prec = precCmp;
+         this.tok = _Operator;
+      } else {
+         this.op = Not;
+         this.prec = 0;
+         this.tok = _Operator;
+         }
+   return true;
+   }
+
+// End Experimental --------------------------------------------------------
+   
 func (s *scanner) ident() {
 	// accelerate common case (7bit ASCII)
 	for isLetter(s.ch) || isDecimal(s.ch) {

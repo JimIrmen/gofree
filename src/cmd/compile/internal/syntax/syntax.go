@@ -65,7 +65,7 @@ type PragmaHandler func(pos Pos, blank bool, text string, current Pragma) Pragma
 //
 // If pragh != nil, it is called with each pragma encountered.
 //
-func Parse(base *PosBase, src io.Reader, errh ErrorHandler, pragh PragmaHandler, mode Mode) (_ *File, first error) {
+func ParseOld(base *PosBase, src io.Reader, errh ErrorHandler, pragh PragmaHandler, mode Mode) (_ *File, first error) {
 	defer func() {
 		if p := recover(); p != nil {
 			if err, ok := p.(Error); ok {
@@ -81,16 +81,50 @@ func Parse(base *PosBase, src io.Reader, errh ErrorHandler, pragh PragmaHandler,
 	p.next()
 	return p.fileOrNil(), p.first
 }
+// AutoSemiOff
 
+func Parse(base *PosBase, src io.Reader, errh ErrorHandler, pragh PragmaHandler, mode Mode) (_ *File, first error) {
+   defer errRecovery(first);
+   var codeParser parser;
+   codeParser.init(base,src,errh,pragh,mode);
+   codeParser.next();
+   return codeParser.fileOrNil(),codeParser.first;
+   }
+   
+func errRecovery(firstError error) {
+   var errInterface interface{} = recover();
+   var err Error;
+   var ok bool;
+   
+      if errInterface != nil {
+      	 err,ok = errInterface.(Error);
+      	    if ok {
+      	       firstError = err;
+      	    }else {
+      	       panic(errInterface);
+      	       }
+         }
+   return;
+   }
+  
+// AutoSemiOn   
 // ParseFile behaves like Parse but it reads the source from the named file.
 func ParseFile(filename string, errh ErrorHandler, pragh PragmaHandler, mode Mode) (*File, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		if errh != nil {
-			errh(err)
-		}
-		return nil, err
-	}
-	defer f.Close()
-	return Parse(NewFileBase(filename), f, errh, pragh, mode)
-}
+   var toParse *os.File;
+   var fileError error;
+   var parsedFile *File;
+   var parseError error;
+
+   toParse,fileError = os.Open(filename);
+      if fileError == nil {
+      	 defer toParse.Close();
+      	 parsedFile,parseError = Parse(NewFileBase(filename),toParse,errh,pragh,mode);
+      } else {
+         parseError = fileError;
+         parsedFile = nil;
+            if errh != nil {
+               errh(fileError);
+               }
+         }
+   return parsedFile,parseError;
+   }

@@ -92,10 +92,10 @@ func (this *parser) lineDirective(line uint,col uint,msg string,text string) {
 
 func (this *parser) autoSemiDirective(line uint,col uint,msg string,text string) {
 	var dlen uint;
-	dlen = 0;
+	dlen = 0; 
       if strings.HasPrefix(text,"AutoSemiOff") {
             if this.mode & NoAutoSemi == 0 {
-               fmt.Println("Auto Semi Off");
+               fmt.Println("Info: --> Auto Semi insertion Off");
                this.previousMode = this.mode;
                this.mode = this.mode | NoAutoSemi;
                this.scanner.setNoAutoSemi();
@@ -103,7 +103,7 @@ func (this *parser) autoSemiDirective(line uint,col uint,msg string,text string)
          dlen = 11; 
       } else if strings.HasPrefix(text,"AutoSemiOn") {
       	    if this.mode & NoAutoSemi != 0 {
-               fmt.Println("Auto Semi On: ",this.tok);
+               fmt.Println("Info: --> Auto Semi Insertion On");
                this.previousMode = this.mode;
                this.mode = this.mode &^ NoAutoSemi;
                this.scanner.setAutoSemi();
@@ -416,7 +416,7 @@ func (p *parser) print(msg string) {
 // nil; all others are expected to return a valid non-nil node.
 
 // SourceFile = PackageClause ";" { ImportDecl ";" } { TopLevelDecl ";" } .
-func (p *parser) fileOrNil() *File {
+func (p *parser) fileOrNilOld() *File {
 	if trace {
 		defer p.trace("file")()
 	}
@@ -480,7 +480,7 @@ func (p *parser) fileOrNil() *File {
 		// since comments before may set pragmas for the next function decl.
 		p.clearPragma()
 
-		if p.tok != _EOF && !p.got(_Semi) && p.mode & NoAutoSemi == 0 {
+		if p.tok != _EOF && !p.got(_Semi) && p.mode & NoAutoSemi == 0 && p.previousMode == p.mode {
 			p.syntaxError("after top level declaration")
 			p.advance(_Const, _Type, _Var, _Func)
 		}
@@ -493,11 +493,93 @@ func (p *parser) fileOrNil() *File {
 	return f
 }
 
+// ----------------------- Experimental ---------------------------------------
+
+func (this *parser) fileOrNil() *File {
+   
+      if trace {
+         defer this.trace("file")();
+         }
+   var parsedFile *File = new(File);
+   parsedFile.pos = this.pos();
+      if this.got(_Package) {
+         parsedFile.Pragma = this.takePragma();
+         parsedFile.PkgName = this.name();
+         this.want(_Semi);
+            if(this.first == nil){
+               // Import Declarations
+               this.parseImports(parsedFile);
+               this.parseTopLevels(parsedFile);
+               this.clearPragma();
+               parsedFile.Lines = this.line;
+            } else {
+               parsedFile = nil;
+               }            
+      } else {
+         this.syntaxError("package statement must be first");
+         parsedFile = nil;
+         }
+   return parsedFile;
+   }
+   
+func (this *parser) parseImports(parseFile *File) {
+      for this.got(_Import) {
+         parseFile.DeclList = this.appendGroup(parseFile.DeclList,this.importDecl);
+         this.want(_Semi);
+         }
+   return;
+   }
+
+func (this *parser) parseTopLevels(parseFile *File) {
+   var appendFunc func(*Group) Decl;
+      for this.tok != _EOF {
+         appendFunc = this.appendFunction(this.tok);
+            if appendFunc != nil || this.tok == _Func {
+               this.next();
+                  if(appendFunc != nil){
+                     parseFile.DeclList = this.appendGroup(parseFile.DeclList,appendFunc);
+                  } else {
+                     var funcDcl *FuncDecl = this.funcDeclOrNil();
+                        if funcDcl != nil {
+                           parseFile.DeclList = append(parseFile.DeclList,funcDcl);
+                           }   
+                     }
+               this.clearPragma();
+                  if this.tok != _EOF && !this.got(_Semi) && this.mode & NoAutoSemi == 0 && this.previousMode == this.mode {
+                     this.syntaxError("after top level declaration");
+                     this.advance(_Const,_Type,_Var,_Func);
+                     }
+            } else{
+                  if this.tok == _Lbrace && len(parseFile.DeclList) > 0 && isEmptyFuncDecl(parseFile.DeclList[len(parseFile.DeclList) - 1]) {
+                     this.syntaxError("unexpected semicolon or newline before {");
+                  } else {
+                     this.syntaxError("non-declaration statement outside function body");
+                     }
+               this.advance(_Const,_Type,_Var,_Func);
+               }
+         }
+   return;
+   }
+   
+func (this *parser) appendFunction(currentToken token) func(*Group) Decl {
+   var appendFunc func(*Group) Decl = nil;
+      if currentToken == _Const {
+         appendFunc = this.constDecl;      
+      } else if currentToken == _Type {
+         appendFunc = this.typeDecl;
+      } else if currentToken == _Var {
+         appendFunc = this.varDecl;
+         }
+   return appendFunc;
+   }
+
+// --------------------------- End Experimental -----------------------------
+   
 func isEmptyFuncDecl(dcl Decl) bool {
 	f, ok := dcl.(*FuncDecl)
 	return ok && f.Body == nil
 }
-
+   
 // ----------------------------------------------------------------------------
 // Declarations
 
@@ -535,7 +617,8 @@ func (p *parser) list(open, sep, close token, f func() bool) Pos {
 }
 
 // appendGroup(f) = f | "(" { f ";" } ")" . // ";" is optional before ")"
-func (p *parser) appendGroup(list []Decl, f func(*Group) Decl) []Decl {
+func (p *parser) appendGroupX(list []Decl, f func(*Group) Decl) []Decl {
+	
 	if p.tok == _Lparen {
 		g := new(Group)
 		p.clearPragma()
@@ -558,6 +641,29 @@ func (p *parser) appendGroup(list []Decl, f func(*Group) Decl) []Decl {
 	return list
 }
 
+func (this *parser) appendGroup(list[]Decl, appendFunction func(*Group) Decl) []Decl {
+      
+      if this.tok == _Lparen {
+         var group *Group = new(Group);
+         var listDone func() bool = func() bool{
+            list = append(list,appendFunction(group));
+            return false;
+            };
+         this.clearPragma();
+         this.list(_Lparen,_Semi,_Rparen,listDone);
+      } else {
+         list = append(list,appendFunction(nil));
+         }
+      if debug {
+            for _, decl := range list {
+                  if decl == nil {
+                     panic("nil list entry");
+                     }
+               }
+         }
+   return list;
+   }
+   
 // ImportSpec = [ "." | PackageName ] ImportPath .
 // ImportPath = string_lit .
 func (p *parser) importDecl(group *Group) Decl {
@@ -610,27 +716,25 @@ func (p *parser) constDecl(group *Group) Decl {
 }
 
 // TypeSpec = identifier [ "=" ] Type .
-func (p *parser) typeDecl(group *Group) Decl {
-	if trace {
-		defer p.trace("typeDecl")()
-	}
-
-	d := new(TypeDecl)
-	d.pos = p.pos()
-	d.Group = group
-	d.Pragma = p.takePragma()
-
-	d.Name = p.name()
-	d.Alias = p.gotAssign()
-	d.Type = p.typeOrNil()
-	if d.Type == nil {
-		d.Type = p.badExpr()
-		p.syntaxError("in type declaration")
-		p.advance(_Semi, _Rparen)
-	}
-
-	return d
-}
+func (this *parser) typeDecl(group *Group) Decl {
+      if trace {
+         defer this.trace("typeDecl")()
+         }
+//d := new(TypeDecl)
+   var decl *TypeDecl = new(TypeDecl);
+   decl.pos = this.pos()
+   decl.Group = group
+   decl.Pragma = this.takePragma()
+   decl.Name = this.name()
+   decl.Alias = this.gotAssign()
+   decl.Type = this.typeOrNil()
+      if decl.Type == nil {
+         decl.Type = this.badExpr()
+         this.syntaxError("in type declaration")
+         this.advance(_Semi, _Rparen)
+         }
+   return decl
+   }
 
 // VarSpec = IdentifierList ( Type [ "=" ExpressionList ] | "=" ExpressionList ) .
 func (p *parser) varDecl(group *Group) Decl {

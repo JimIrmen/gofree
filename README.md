@@ -74,7 +74,7 @@ On the surface automatic semi-colon insertion sounds like a good thing. In pract
       func3()
 ```
 In simple terms developer's are restricted to using a K&R(1TBS) style. Unfortunately I prefer a Ratliff style, others perhaps an Allman, or Whitesmiths. What annoys me the most is the fact that I'm rather old school. I was taught as a young CS student that programming languages should not make format part of the syntax, a design error by many early language developers. So the Go team forcing such format just rubs me the wrong way.
-##Other Strange Syntax Effects
+## Other Strange Syntax Effects
 There is also one special rule about semi-colons and automatic insertion. Note the following is a valid Go statement with automatic semi-colon insertions.
 
 ```go

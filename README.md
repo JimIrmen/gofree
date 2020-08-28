@@ -36,7 +36,8 @@ In this context myVar is allocated and assigned without the developer having to 
 ```
 Although the former may look more elegant, I personally prefer the latter for maintenance and clarity of code.
 * These are just few of the obvious differences and they all pale in comparison to the one difference that annoys me (and many others) the most. The Go team decided that one of the largest difficulties in programming today is statement termination. That is, the evil of forcing developers to use a semi-colon. So the Go team wrote a parser and scanner that automatically inserts semi-colons in the code whenever a newline is encountered. The result is Go developers don't have to use semi-colons to terminate a Go statement, instead a statement is terminated by a newline character (how is this better?). It is important to note that the actual specifications of the Go language specify the requirement for a terminating statement character, the semi-colon.
-## Automatic Semi-Colon Insertion
+
+##Automatic Semi-Colon Insertion
 On the surface automatic semi-colon insertion sounds like a good thing. In practice this seemingly helpful decision forces a strict code format on the developer. For example, developers are forced into the following code format:
 
 ```go
